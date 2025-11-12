@@ -5,7 +5,7 @@ The goal is to automate an ML workflow using **GitHub Actions** — from preproc
 
 ---
 
-## 🎯 Learning Objectives!
+## 🎯 Learning Objectives
 
 By the end of this activity, you will be able to:
 
