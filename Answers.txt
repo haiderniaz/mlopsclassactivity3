@@ -1,0 +1,79 @@
+1. How does CI/CD improve collaboration in ML teams?
+CI/CD improves collaboration in ML teams by:
+
+Automated consistency: The GitHub Actions workflow ensures all team members follow the same preprocessing → training → evaluation pipeline, eliminating "works on my machine" issues
+Version control integration: Every code change triggers the pipeline automatically, maintaining reproducible model versions with github.run_number
+Artifact management: Models are automatically uploaded as artifacts, making trained models accessible to all team members
+Quality gates: The evaluation step with threshold checking (accuracy < 0.9) prevents low-quality models from progressing
+Transparency: All pipeline runs are visible in GitHub Actions, providing clear audit trails and shared visibility into model performance.
+
+
+2. What happens if the evaluation score is below a defined threshold?
+Based on your evaluate.py, when the model accuracy falls below the threshold (0.9): 
+        if accuracy < 0.9:
+            raise SystemExit("❌ Model accuracy below threshold. Failing pipeline.")
+> The pipeline fails immediately and stops execution
+> GitHub Actions marks the workflow run as failed (red status)
+> No artifacts are uploaded - preventing deployment of subpar models
+> Team members receive notifications about the failure
+> The model file is not promoted to production or made available for download
+> This acts as a quality gate ensuring only models meeting performance standards proceed
+
+3. How can retraining or drift detection be integrated into this workflow?
+Several integration approaches:
+
+Scheduled Retraining:
+        on:
+        schedule:
+            - cron: '0 2 * * 0'  # Weekly retraining
+        push:
+            branches: [main]
+
+Drift Detection Integration:
+
+Add a drift_detection.py step before training
+Compare new data distributions against baseline using statistical tests
+Trigger retraining only when drift is detected:
+
+        - name: Detect drift
+        run: python drift_detection.py --threshold 0.1
+        - name: Train model (conditional)
+        if: steps.drift-check.outputs.drift-detected == 'true'
+        run: python train.py --version ${{ github.run_number }}
+
+Performance Monitoring:
+
+Add model performance monitoring on live data
+Trigger workflow via webhook when performance degrades
+Include A/B testing evaluation in the pipeline
+
+4. What steps are needed to deploy this workflow to production (e.g., AWS, Kubernetes)?
+AWS Deployment Steps:
+
+Container Registry Setup:
+
+        - name: Build and push Docker image
+        run: |
+            docker build -f Dockerfile.serve -t $ECR_REGISTRY/ml-model:${{ github.run_number }} .
+            docker push $ECR_REGISTRY/ml-model:${{ github.run_number }}
+
+AWS Integration:
+Configure AWS credentials in GitHub Secrets
+Add deployment steps to push to ECS/EKS
+Use AWS CodeDeploy for blue-green deployments
+
+Kubernetes Deployment:
+
+        - name: Deploy to K8s
+        run: |
+            kubectl set image deployment/ml-model ml-model=$ECR_REGISTRY/ml-model:${{ github.run_number }}
+            kubectl rollout status deployment/ml-model
+
+Production Readiness Requirements:
+
+Environment separation: Separate pipelines for dev/staging/prod
+Security: Use GitHub Secrets for credentials, implement RBAC
+Monitoring: Add health checks, logging, and metrics collection
+Rollback strategy: Implement automated rollback on deployment failures
+Infrastructure as Code: Use Terraform/CloudFormation for reproducible infrastructure
+Load testing: Add performance testing steps before production deployment
